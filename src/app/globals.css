@@ -1,0 +1,46 @@
+@import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap");
+
+@theme {
+  --color-primary: #f472b6;
+  --color-primary-light: #fce7f3;
+  --color-primary-dark: #db2777;
+  --color-surface: #ffffff;
+  --color-surface-2: #fafafa;
+  --color-surface-3: #f5f5f5;
+  --color-text: #111111;
+  --color-text-2: #555555;
+  --color-text-3: #999999;
+  --color-border: #ebebeb;
+  --color-live: #f97316;
+  --color-release: #8b5cf6;
+
+  --font-sans: "Noto Sans JP", sans-serif;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  overscroll-behavior: none;
+}
+
+/* Safe area for PWA on notched devices */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
