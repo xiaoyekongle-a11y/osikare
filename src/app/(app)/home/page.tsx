@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { format, isToday, isTomorrow, parseISO, startOfDay, addDays } from "date-fns";
 import { ja } from "date-fns/locale";
+import type { Oshi, OshiEvent } from "@/lib/types";
+
+type EventWithOshi = OshiEvent & { oshi: Pick<Oshi, "artist_name" | "color"> | null };
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -9,16 +12,15 @@ export default async function HomePage() {
   const today = startOfDay(new Date());
   const weekLater = addDays(today, 7);
 
-  // 今後7日間のイベントを取得
-  const { data: oshiList } = await supabase
+  const { data: oshiList } = await (supabase as any)
     .from("oshi")
     .select("id, artist_name, color, image_url")
     .eq("user_id", user!.id);
 
-  const oshiIds = oshiList?.map((o) => o.id) ?? [];
+  const oshiIds: string[] = (oshiList ?? []).map((o: Oshi) => o.id);
 
-  const { data: events } = oshiIds.length > 0
-    ? await supabase
+  const { data: eventsRaw } = oshiIds.length > 0
+    ? await (supabase as any)
         .from("events")
         .select("*, oshi(artist_name, color)")
         .in("oshi_id", oshiIds)
@@ -27,12 +29,12 @@ export default async function HomePage() {
         .order("event_date", { ascending: true })
     : { data: [] };
 
-  const todayEvents = events?.filter((e) => isToday(parseISO(e.event_date))) ?? [];
-  const upcomingEvents = events?.filter((e) => !isToday(parseISO(e.event_date))) ?? [];
+  const events: EventWithOshi[] = eventsRaw ?? [];
+  const todayEvents = events.filter((e) => isToday(parseISO(e.event_date)));
+  const upcomingEvents = events.filter((e) => !isToday(parseISO(e.event_date)));
 
   return (
     <div style={{ padding: "20px 16px" }}>
-      {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <p style={{ color: "var(--color-text-3)", fontSize: 13, margin: 0 }}>
           {format(new Date(), "M月d日（E）", { locale: ja })}
@@ -42,7 +44,6 @@ export default async function HomePage() {
         </h1>
       </div>
 
-      {/* 今日のイベント */}
       <section style={{ marginBottom: 28 }}>
         <h2 style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-2)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
           今日
@@ -54,14 +55,11 @@ export default async function HomePage() {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {todayEvents.map((e: any) => (
-              <EventCard key={e.id} event={e} />
-            ))}
+            {todayEvents.map((e) => <EventCard key={e.id} event={e} />)}
           </div>
         )}
       </section>
 
-      {/* 今後のイベント */}
       <section>
         <h2 style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-2)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>
           今後7日間
@@ -74,9 +72,7 @@ export default async function HomePage() {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {upcomingEvents.map((e: any) => (
-              <EventCard key={e.id} event={e} />
-            ))}
+            {upcomingEvents.map((e) => <EventCard key={e.id} event={e} />)}
           </div>
         )}
       </section>
@@ -84,7 +80,7 @@ export default async function HomePage() {
   );
 }
 
-function EventCard({ event }: { event: any }) {
+function EventCard({ event }: { event: EventWithOshi }) {
   const date = parseISO(event.event_date);
   const isLive = event.type === "live";
   const accentColor = isLive ? "var(--color-live)" : "var(--color-release)";
@@ -95,35 +91,24 @@ function EventCard({ event }: { event: any }) {
     : format(date, "M/d（E）", { locale: ja });
 
   return (
-    <div
-      style={{
-        background: "var(--color-surface)",
-        border: "1px solid var(--color-border)",
-        borderRadius: "var(--radius-md)",
-        padding: "14px 16px",
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-      }}
-    >
-      {/* Type badge */}
-      <div
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: "var(--radius-sm)",
-          background: isLive ? "#fff7ed" : "#f5f3ff",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 20,
-          flexShrink: 0,
-        }}
-      >
+    <div style={{
+      background: "var(--color-surface)",
+      border: "1px solid var(--color-border)",
+      borderRadius: "var(--radius-md)",
+      padding: "14px 16px",
+      display: "flex",
+      alignItems: "center",
+      gap: 14,
+    }}>
+      <div style={{
+        width: 40, height: 40,
+        borderRadius: "var(--radius-sm)",
+        background: isLive ? "#fff7ed" : "#f5f3ff",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 20, flexShrink: 0,
+      }}>
         {isLive ? "🎤" : "💿"}
       </div>
-
-      {/* Info */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontSize: 15, fontWeight: 500, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {event.title}
@@ -133,8 +118,6 @@ function EventCard({ event }: { event: any }) {
           {event.venue && ` · ${event.venue}`}
         </p>
       </div>
-
-      {/* Date */}
       <div style={{ textAlign: "right", flexShrink: 0 }}>
         <p style={{ fontSize: 13, fontWeight: 500, color: accentColor, margin: 0 }}>{dateLabel}</p>
       </div>
