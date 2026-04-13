@@ -207,3 +207,5 @@ function GoogleIcon() {
     </svg>
   );
 }
+
+export const dynamic = "force-dynamic";
