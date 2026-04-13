@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Oshi, ItunesArtist } from "@/lib/types";
 import Image from "next/image";
+import LoginPrompt from "@/components/LoginPrompt";
 
 export default function OshiPage() {
   const supabase = createClient();
@@ -11,14 +12,22 @@ export default function OshiPage() {
   const [suggestions, setSuggestions] = useState<ItunesArtist[]>([]);
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   useEffect(() => {
-    fetchOshi();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setUserId(user.id);
+        fetchOshi(user.id);
+      }
+    });
   }, []);
 
-  async function fetchOshi() {
-    const { data } = await supabase.from("oshi").select("*").order("created_at");
+  async function fetchOshi(uid: string) {
+    const { data } = await (supabase as any)
+      .from("oshi").select("*").eq("user_id", uid).order("created_at");
     setOshiList(data ?? []);
   }
 
@@ -36,12 +45,20 @@ export default function OshiPage() {
     }, 400);
   }
 
+  async function handleAddClick(artist: ItunesArtist) {
+    // 未ログインならログイン促す
+    if (!userId) {
+      setShowSuggestions(false);
+      setShowLoginPrompt(true);
+      return;
+    }
+    await addOshi(artist);
+  }
+
   async function addOshi(artist: ItunesArtist) {
     setLoading(true);
     setShowSuggestions(false);
     setQuery("");
-
-    // アーティスト画像をiTunesから取得
     const imgRes = await fetch(
       `https://itunes.apple.com/lookup?id=${artist.artistId}&entity=song&limit=1`
     );
@@ -49,22 +66,20 @@ export default function OshiPage() {
     const track = imgJson.results?.find((r: any) => r.artworkUrl100);
     const imageUrl = track?.artworkUrl100?.replace("100x100", "300x300") ?? null;
 
-    const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from("oshi").insert({
-      user_id: user!.id,
+    await (supabase as any).from("oshi").insert({
+      user_id: userId,
       artist_name: artist.artistName,
       itunes_id: String(artist.artistId),
       image_url: imageUrl,
       color: randomPastel(),
     });
-
-    await fetchOshi();
+    await fetchOshi(userId!);
     setLoading(false);
   }
 
   async function removeOshi(id: string) {
     if (!confirm("この推しを削除しますか？\n関連するイベントもすべて削除されます。")) return;
-    await supabase.from("oshi").delete().eq("id", id);
+    await (supabase as any).from("oshi").delete().eq("id", id);
     setOshiList((prev) => prev.filter((o) => o.id !== id));
   }
 
@@ -74,58 +89,38 @@ export default function OshiPage() {
 
       {/* 検索 */}
       <div style={{ position: "relative", marginBottom: 24 }}>
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            type="text"
-            placeholder="アーティスト名を検索..."
-            value={query}
-            onChange={(e) => handleSearch(e.target.value)}
-            onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-            style={{
-              flex: 1,
-              padding: "12px 14px",
-              fontSize: 15,
-              border: "1px solid var(--color-border)",
-              borderRadius: "var(--radius-sm)",
-              outline: "none",
-              fontFamily: "var(--font-sans)",
-            }}
-          />
-        </div>
+        <input
+          type="text"
+          placeholder="アーティスト名を検索..."
+          value={query}
+          onChange={(e) => handleSearch(e.target.value)}
+          onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+          style={{
+            width: "100%", padding: "12px 14px", fontSize: 15,
+            border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-sm)", outline: "none",
+            fontFamily: "var(--font-sans)",
+          }}
+        />
 
-        {/* サジェスト */}
         {showSuggestions && suggestions.length > 0 && (
-          <div
-            style={{
-              position: "absolute",
-              top: "calc(100% + 4px)",
-              left: 0,
-              right: 0,
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "var(--radius-md)",
-              overflow: "hidden",
-              zIndex: 100,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-            }}
-          >
+          <div style={{
+            position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
+            background: "var(--color-surface)", border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-md)", overflow: "hidden", zIndex: 100,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+          }}>
             {suggestions.map((artist) => (
               <button
                 key={artist.artistId}
-                onClick={() => addOshi(artist)}
+                onClick={() => handleAddClick(artist)}
                 disabled={loading || oshiList.some((o) => o.itunes_id === String(artist.artistId))}
                 style={{
-                  width: "100%",
-                  padding: "12px 16px",
-                  textAlign: "left",
-                  background: "none",
-                  border: "none",
+                  width: "100%", padding: "12px 16px", textAlign: "left",
+                  background: "none", border: "none",
                   borderBottom: "1px solid var(--color-border)",
-                  cursor: "pointer",
-                  fontFamily: "var(--font-sans)",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
+                  cursor: "pointer", fontFamily: "var(--font-sans)",
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
                 }}
               >
                 <div>
@@ -149,7 +144,16 @@ export default function OshiPage() {
       {oshiList.length === 0 ? (
         <div style={{ textAlign: "center", padding: "48px 0", color: "var(--color-text-3)" }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>⭐</div>
-          <p style={{ fontSize: 15 }}>推しを追加してみよう</p>
+          <p style={{ fontSize: 15, marginBottom: 4 }}>推しを追加してみよう</p>
+          {!userId && (
+            <p style={{ fontSize: 13 }}>
+              追加するには
+              <button onClick={() => setShowLoginPrompt(true)} style={{ color: "var(--color-primary)", background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: 13, textDecoration: "underline" }}>
+                ログイン
+              </button>
+              が必要です
+            </p>
+          )}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -158,62 +162,37 @@ export default function OshiPage() {
           ))}
         </div>
       )}
+
+      {/* ログインプロンプト */}
+      {showLoginPrompt && <LoginPrompt onClose={() => setShowLoginPrompt(false)} />}
     </div>
   );
 }
 
 function OshiCard({ oshi, onRemove }: { oshi: Oshi; onRemove: (id: string) => void }) {
   return (
-    <div
-      style={{
-        background: "var(--color-surface)",
-        border: "1px solid var(--color-border)",
-        borderRadius: "var(--radius-md)",
-        padding: "14px 16px",
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-      }}
-    >
-      {/* Avatar */}
-      <div
-        style={{
-          width: 48,
-          height: 48,
-          borderRadius: "var(--radius-sm)",
-          background: oshi.color ?? "var(--color-primary-light)",
-          overflow: "hidden",
-          flexShrink: 0,
-        }}
-      >
+    <div style={{
+      background: "var(--color-surface)", border: "1px solid var(--color-border)",
+      borderRadius: "var(--radius-md)", padding: "14px 16px",
+      display: "flex", alignItems: "center", gap: 14,
+    }}>
+      <div style={{
+        width: 48, height: 48, borderRadius: "var(--radius-sm)",
+        background: oshi.color ?? "var(--color-primary-light)",
+        overflow: "hidden", flexShrink: 0,
+      }}>
         {oshi.image_url && (
-          <Image
-            src={oshi.image_url}
-            alt={oshi.artist_name}
-            width={48}
-            height={48}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
+          <Image src={oshi.image_url} alt={oshi.artist_name} width={48} height={48}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         )}
       </div>
-
       <div style={{ flex: 1 }}>
         <p style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>{oshi.artist_name}</p>
       </div>
-
-      <button
-        onClick={() => onRemove(oshi.id)}
-        style={{
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          color: "var(--color-text-3)",
-          fontSize: 20,
-          padding: "4px 8px",
-        }}
-      >
-        ✕
-      </button>
+      <button onClick={() => onRemove(oshi.id)} style={{
+        background: "none", border: "none", cursor: "pointer",
+        color: "var(--color-text-3)", fontSize: 20, padding: "4px 8px",
+      }}>✕</button>
     </div>
   );
 }
