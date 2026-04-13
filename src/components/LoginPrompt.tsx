@@ -21,8 +21,8 @@ export default function LoginPrompt({ onClose }: { onClose: () => void }) {
     const trimmed = username.trim();
     if (!trimmed) { setError("ユーザー名を入力してください"); return; }
     if (trimmed.length < 3) { setError("ユーザー名は3文字以上にしてください"); return; }
-    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) { setError("ユーザー名は英数字・アンダースコアのみ使えます"); return; }
     if (password.length < 6) { setError("パスワードは6文字以上にしてください"); return; }
+    if (!/^[a-zA-Z0-9_]+$/.test(password)) { setError("パスワードは英数字・アンダースコアのみ使えます"); return; }
 
     setLoading(true);
     setError("");
@@ -104,7 +104,7 @@ export default function LoginPrompt({ onClose }: { onClose: () => void }) {
             />
             {isSignUp && (
               <p style={{ fontSize: 11, color: "var(--color-text-3)", marginTop: 4 }}>
-                英数字・アンダースコアのみ、3文字以上
+                ユーザー名は何でもOK
               </p>
             )}
           </div>
@@ -113,7 +113,7 @@ export default function LoginPrompt({ onClose }: { onClose: () => void }) {
             <label style={labelStyle}>パスワード</label>
             <input
               type="password"
-              placeholder="6文字以上"
+              placeholder="英数字・アンダースコア、6文字以上"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(""); }}
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
