@@ -3,77 +3,69 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
+function toEmail(username: string) {
+  return `${username.toLowerCase().trim()}@osikare.app`;
+}
+
 export default function LoginPage() {
   const supabase = createClient();
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
 
-  async function handleEmailAuth() {
+  async function handleSubmit() {
+    const trimmed = username.trim();
+    if (!trimmed) { setError("ユーザー名を入力してください"); return; }
+    if (trimmed.length < 3) { setError("ユーザー名は3文字以上にしてください"); return; }
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) { setError("英数字・アンダースコアのみ使えます"); return; }
+    if (password.length < 6) { setError("パスワードは6文字以上にしてください"); return; }
+
     setLoading(true);
     setError("");
-    setMessage("");
+    const email = toEmail(trimmed);
+
     if (isSignUp) {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { username: trimmed } },
+      });
       if (error) {
-        setError(error.message);
+        setError(error.message.includes("already registered")
+          ? "このユーザー名はすでに使われています"
+          : "登録に失敗しました: " + error.message);
       } else {
-        setMessage("確認メールを送信しました。メールをご確認ください。");
+        const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+        if (!loginError) router.push("/home");
+        else setError("ログインに失敗しました");
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        setError("メールアドレスまたはパスワードが正しくありません");
-      } else {
-        router.push("/home");
-      }
+      if (error) setError("ユーザー名またはパスワードが違います");
+      else router.push("/home");
     }
     setLoading(false);
   }
 
-  async function handleGoogle() {
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${location.origin}/auth/callback` },
-    });
-    if (error) setError(error.message);
-    setLoading(false);
-  }
-
   return (
-    <div
-      style={{
-        minHeight: "100dvh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px",
-        background: "var(--color-surface-2)",
-      }}
-    >
-      {/* Logo */}
-      <div style={{ textAlign: "center", marginBottom: "40px" }}>
-        <div
-          style={{
-            width: 64,
-            height: 64,
-            borderRadius: "var(--radius-lg)",
-            background: "var(--color-primary-light)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            margin: "0 auto 16px",
-            fontSize: 32,
-          }}
-        >
-          🌸
-        </div>
+    <div style={{
+      minHeight: "100dvh", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      padding: "24px", background: "var(--color-surface-2)",
+    }}>
+      {/* ロゴ */}
+      <div style={{ textAlign: "center", marginBottom: 40 }}>
+        <div style={{
+          width: 64, height: 64, borderRadius: "var(--radius-lg)",
+          background: "var(--color-primary-light)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          margin: "0 auto 16px", fontSize: 32,
+        }}>🌸</div>
         <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.5px", margin: 0 }}>
           オシカレ
         </h1>
@@ -82,130 +74,90 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* Form */}
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 360,
-          background: "var(--color-surface)",
-          borderRadius: "var(--radius-lg)",
-          border: "1px solid var(--color-border)",
-          padding: "28px 24px",
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <input
-            type="email"
-            placeholder="メールアドレス"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={inputStyle}
-          />
-          <input
-            type="password"
-            placeholder="パスワード"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleEmailAuth()}
-            style={inputStyle}
-          />
+      {/* フォーム */}
+      <div style={{
+        width: "100%", maxWidth: 360,
+        background: "var(--color-surface)",
+        borderRadius: "var(--radius-lg)",
+        border: "1px solid var(--color-border)",
+        padding: "28px 24px",
+      }}>
+        <h2 style={{ fontSize: 17, fontWeight: 700, margin: "0 0 20px" }}>
+          {isSignUp ? "アカウントを作成" : "ログイン"}
+        </h2>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label style={labelStyle}>ユーザー名</label>
+            <input
+              type="text"
+              placeholder="例: sakura_fan"
+              value={username}
+              onChange={(e) => { setUsername(e.target.value); setError(""); }}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              style={inputStyle}
+              autoCapitalize="none"
+              autoComplete="username"
+            />
+            {isSignUp && (
+              <p style={{ fontSize: 11, color: "var(--color-text-3)", marginTop: 4 }}>
+                英数字・アンダースコアのみ、3文字以上
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label style={labelStyle}>パスワード</label>
+            <input
+              type="password"
+              placeholder="6文字以上"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setError(""); }}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              style={inputStyle}
+              autoComplete={isSignUp ? "new-password" : "current-password"}
+            />
+          </div>
 
           {error && (
-            <p style={{ color: "#ef4444", fontSize: 13, margin: 0 }}>{error}</p>
-          )}
-          {message && (
-            <p style={{ color: "#22c55e", fontSize: 13, margin: 0 }}>{message}</p>
+            <div style={{
+              background: "#fef2f2", border: "1px solid #fecaca",
+              borderRadius: "var(--radius-sm)", padding: "10px 12px",
+              fontSize: 13, color: "#dc2626",
+            }}>
+              {error}
+            </div>
           )}
 
-          <button onClick={handleEmailAuth} disabled={loading} style={primaryBtnStyle}>
-            {loading ? "..." : isSignUp ? "新規登録" : "ログイン"}
+          <button onClick={handleSubmit} disabled={loading} style={{ ...primaryBtnStyle, opacity: loading ? 0.7 : 1 }}>
+            {loading ? "..." : isSignUp ? "登録して始める" : "ログイン"}
           </button>
 
-          <button
-            onClick={() => { setIsSignUp(!isSignUp); setError(""); setMessage(""); }}
-            style={ghostBtnStyle}
-          >
-            {isSignUp ? "ログインはこちら" : "アカウントを作成"}
+          <button onClick={() => { setIsSignUp(!isSignUp); setError(""); }} style={ghostBtnStyle}>
+            {isSignUp ? "すでにアカウントをお持ちの方" : "アカウントを作成する"}
           </button>
         </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "20px 0" }}>
-          <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
-          <span style={{ color: "var(--color-text-3)", fontSize: 12 }}>または</span>
-          <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
-        </div>
-
-        <button onClick={handleGoogle} disabled={loading} style={googleBtnStyle}>
-          <GoogleIcon />
-          Googleでログイン
-        </button>
       </div>
     </div>
   );
 }
 
+const labelStyle: React.CSSProperties = {
+  display: "block", fontSize: 13, fontWeight: 500,
+  color: "var(--color-text-2)", marginBottom: 6,
+};
 const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "12px 14px",
-  fontSize: 15,
-  border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-sm)",
-  outline: "none",
-  fontFamily: "var(--font-sans)",
-  background: "var(--color-surface)",
-  color: "var(--color-text)",
+  width: "100%", padding: "12px 14px", fontSize: 15,
+  border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
+  outline: "none", fontFamily: "var(--font-sans)",
 };
-
 const primaryBtnStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "13px",
-  fontSize: 15,
-  fontWeight: 500,
-  background: "var(--color-primary)",
-  color: "#fff",
-  border: "none",
-  borderRadius: "var(--radius-sm)",
-  cursor: "pointer",
-  fontFamily: "var(--font-sans)",
+  width: "100%", padding: "14px", fontSize: 15, fontWeight: 600,
+  background: "var(--color-primary)", color: "#fff", border: "none",
+  borderRadius: "var(--radius-sm)", cursor: "pointer", fontFamily: "var(--font-sans)",
 };
-
 const ghostBtnStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "10px",
-  fontSize: 14,
-  color: "var(--color-text-2)",
-  background: "transparent",
-  border: "none",
-  cursor: "pointer",
-  fontFamily: "var(--font-sans)",
+  width: "100%", padding: "10px", fontSize: 14,
+  color: "var(--color-text-2)", background: "transparent",
+  border: "none", cursor: "pointer", fontFamily: "var(--font-sans)",
 };
-
-const googleBtnStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "12px",
-  fontSize: 14,
-  fontWeight: 500,
-  background: "var(--color-surface)",
-  color: "var(--color-text)",
-  border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-sm)",
-  cursor: "pointer",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 10,
-  fontFamily: "var(--font-sans)",
-};
-
-function GoogleIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18">
-      <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
-      <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
-      <path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/>
-      <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/>
-    </svg>
-  );
-}
-
-export const dynamic = "force-dynamic";
