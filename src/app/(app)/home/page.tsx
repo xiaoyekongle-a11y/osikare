@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { format, isToday, isTomorrow, parseISO, startOfDay, addDays } from "date-fns";
 import { ja } from "date-fns/locale";
 import type { Oshi, OshiEvent } from "@/lib/types";
+import Header from "@/components/Header";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,9 @@ export default async function HomePage() {
   const upcomingEvents = events.filter((e) => !isToday(parseISO(e.event_date)));
 
   return (
-    <div style={{ padding: "20px 16px" }}>
+    <div>
+      <Header title="オシカレ" />
+      <div style={{ padding: "0 16px 20px" }}>
       <div style={{ marginBottom: 24 }}>
         <p style={{ color: "var(--color-text-3)", fontSize: 13, margin: 0 }}>
           {format(new Date(), "M月d日（E）", { locale: ja })}
@@ -84,6 +87,7 @@ export default async function HomePage() {
           </div>
         )}
       </section>
+    </div>
     </div>
   );
 }
