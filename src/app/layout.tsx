@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "オシカレ",
   description: "推しのライブ・リリースをカレンダーで管理",
   manifest: "/manifest.json",
+  icons: { icon: "/favicon.svg", apple: "/favicon.svg" },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

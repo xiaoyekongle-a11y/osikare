@@ -3,6 +3,8 @@ import { format, isToday, isTomorrow, parseISO, startOfDay, addDays } from "date
 import { ja } from "date-fns/locale";
 import type { Oshi, OshiEvent } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 type EventWithOshi = OshiEvent & { oshi: Pick<Oshi, "artist_name" | "color"> | null };
 
 export default async function HomePage() {
@@ -12,24 +14,28 @@ export default async function HomePage() {
   const today = startOfDay(new Date());
   const weekLater = addDays(today, 7);
 
-  const { data: oshiList } = await (supabase as any)
-    .from("oshi")
-    .select("id, artist_name, color, image_url")
-    .eq("user_id", user!.id);
+  let events: EventWithOshi[] = [];
 
-  const oshiIds: string[] = (oshiList ?? []).map((o: Oshi) => o.id);
+  if (user) {
+    const { data: oshiList } = await (supabase as any)
+      .from("oshi")
+      .select("id")
+      .eq("user_id", user.id);
 
-  const { data: eventsRaw } = oshiIds.length > 0
-    ? await (supabase as any)
+    const oshiIds: string[] = (oshiList ?? []).map((o: Oshi) => o.id);
+
+    if (oshiIds.length > 0) {
+      const { data } = await (supabase as any)
         .from("events")
         .select("*, oshi(artist_name, color)")
         .in("oshi_id", oshiIds)
         .gte("event_date", format(today, "yyyy-MM-dd"))
         .lte("event_date", format(weekLater, "yyyy-MM-dd"))
-        .order("event_date", { ascending: true })
-    : { data: [] };
+        .order("event_date", { ascending: true });
+      events = data ?? [];
+    }
+  }
 
-  const events: EventWithOshi[] = eventsRaw ?? [];
   const todayEvents = events.filter((e) => isToday(parseISO(e.event_date)));
   const upcomingEvents = events.filter((e) => !isToday(parseISO(e.event_date)));
 
@@ -49,10 +55,12 @@ export default async function HomePage() {
           今日
         </h2>
         {todayEvents.length === 0 ? (
-          <div style={emptyCardStyle}>
+          <EmptyCard>
             <span style={{ fontSize: 24 }}>✨</span>
-            <p style={{ color: "var(--color-text-3)", fontSize: 14, margin: 0 }}>今日の予定はありません</p>
-          </div>
+            <p style={{ color: "var(--color-text-3)", fontSize: 14, margin: 0 }}>
+              {user ? "今日の予定はありません" : "推しを登録してスケジュールを確認しよう 🌟"}
+            </p>
+          </EmptyCard>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {todayEvents.map((e) => <EventCard key={e.id} event={e} />)}
@@ -65,11 +73,11 @@ export default async function HomePage() {
           今後7日間
         </h2>
         {upcomingEvents.length === 0 ? (
-          <div style={emptyCardStyle}>
+          <EmptyCard>
             <p style={{ color: "var(--color-text-3)", fontSize: 14, margin: 0 }}>
-              {oshiIds.length === 0 ? "推しを登録してスケジュールを確認しよう 🌟" : "今後7日間の予定はありません"}
+              {user ? "今後7日間の予定はありません" : "推しタブからアーティストを追加しよう ⭐"}
             </p>
-          </div>
+          </EmptyCard>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {upcomingEvents.map((e) => <EventCard key={e.id} event={e} />)}
@@ -80,29 +88,34 @@ export default async function HomePage() {
   );
 }
 
+function EmptyCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      background: "var(--color-surface)", border: "1px solid var(--color-border)",
+      borderRadius: "var(--radius-md)", padding: "24px",
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 8, textAlign: "center",
+    }}>
+      {children}
+    </div>
+  );
+}
+
 function EventCard({ event }: { event: EventWithOshi }) {
   const date = parseISO(event.event_date);
   const isLive = event.type === "live";
   const accentColor = isLive ? "var(--color-live)" : "var(--color-release)";
   const oshiColor = event.oshi?.color ?? "var(--color-primary)";
-
   const dateLabel = isToday(date) ? "今日" : isTomorrow(date)
-    ? "明日"
-    : format(date, "M/d（E）", { locale: ja });
+    ? "明日" : format(date, "M/d（E）", { locale: ja });
 
   return (
     <div style={{
-      background: "var(--color-surface)",
-      border: "1px solid var(--color-border)",
-      borderRadius: "var(--radius-md)",
-      padding: "14px 16px",
-      display: "flex",
-      alignItems: "center",
-      gap: 14,
+      background: "var(--color-surface)", border: "1px solid var(--color-border)",
+      borderRadius: "var(--radius-md)", padding: "14px 16px",
+      display: "flex", alignItems: "center", gap: 14,
     }}>
       <div style={{
-        width: 40, height: 40,
-        borderRadius: "var(--radius-sm)",
+        width: 40, height: 40, borderRadius: "var(--radius-sm)",
         background: isLive ? "#fff7ed" : "#f5f3ff",
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: 20, flexShrink: 0,
@@ -118,21 +131,9 @@ function EventCard({ event }: { event: EventWithOshi }) {
           {event.venue && ` · ${event.venue}`}
         </p>
       </div>
-      <div style={{ textAlign: "right", flexShrink: 0 }}>
-        <p style={{ fontSize: 13, fontWeight: 500, color: accentColor, margin: 0 }}>{dateLabel}</p>
-      </div>
+      <p style={{ fontSize: 13, fontWeight: 500, color: accentColor, margin: 0, flexShrink: 0 }}>
+        {dateLabel}
+      </p>
     </div>
   );
 }
-
-const emptyCardStyle: React.CSSProperties = {
-  background: "var(--color-surface)",
-  border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-md)",
-  padding: "24px",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  gap: 8,
-  textAlign: "center",
-};
